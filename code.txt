@@ -1,0 +1,206 @@
+% this is a matlab code file. rename the file as .m and run it in matlab command window or on terminal by using 'matlab -batch "code"'
+%  Before running the code - please comment out either of the double definitions of helper_derivative and apply_derivatives both.
+n=5
+nn=2
+k=3
+%  getting the symbolic matrix
+A = sym('x', [1 n^2]);
+a = sym('x', [n n]);
+for i=1:n
+    for j=1:n
+        a(i,j)=A((i-1)*n+j);
+    end
+end
+
+%  getting permanent and determinant of the symbolic matrix
+perm=generate_permanent(n,a);
+a=det(a);
+disp('got det and perm')
+
+%  choosing the subset of field - Split midway across zero, so we can have equal probability of positive and negative coefficient.
+f=10*(n-k)*nchoosek(n^2+k-1,k);
+
+% getting result of application of all k-th order partial derivatives on determinant and perminant.
+[a,perm]=apply_derivatives(a,perm,n,k);
+            disp('deri done')
+
+% getting n^2 random linear-forms for each variable
+lins=generate_linear_forms(n,nn,f);
+            disp('lins created')
+
+%  substituing the n^2 variables with correspoinding linear-form
+            a=subs(a,A,lins);
+            perm=subs(perm,A,lins);
+%             class(perm)
+            disp('projection done')
+%             [ans1,ans2]=
+%  getting APP
+             get_app(a,perm,n,nn,k);
+
+%             disp('gbasis')
+%  getting Reduced Groebner Basis
+            ans=size(gbasis(a));
+            ans(2)
+            ans=size(gbasis(perm));
+            ans(2)
+% disp('done')
+
+%  generating permanent using the symmetric-group technique
+function ret=generate_permanent(n,a) w
+    nums=[1:n];
+    p=perms(nums);
+    ta=cell(1,factorial(n));
+    for i=1:factorial(n)
+        tmp=1;
+        for k=1:n
+            tmp=tmp*a(k,p(i,k));
+        end
+        ta{i}=tmp;
+    end
+    ret=sum(cell2sym(ta));
+end
+
+%  getting linear forms - the coefficeint are chosen uniformly from 'f' defined at the top.
+function ret=generate_linear_forms(n,nn,f)
+    ret=cell(1,n^2);
+    for i=1:n^2
+        lin=sym('l',[1,nn]);
+        r=randi([-((f/2) - 1),f/2],1,nn);
+        lin=lin*r';
+        ret{i}=lin;
+    end
+end
+
+%  getting all possible monomials to later use them as partial-derivative parameter.
+%  i.e. , getting x which will be used to perform d/dx later.
+function ders=get_all_monomials(n,k)
+    dims=n^2;
+    x=sym('x',[d,1]);
+    m = nchoosek(k+dims-1,dims-1);
+    dividers = [zeros(m,1),nchoosek((1:(k+dims-1))',dims-1),ones(m,1)*(k+dims)];
+    a = diff(dividers,1,2)-1;
+    ders = cell(1, size(a,1));
+    for i = 1:size(a,1)
+        ders{i} = prod(x.' .^ a(i,:));
+    end
+end
+
+%  helper function that does d/dx for each pair of 'x' and 'polynomial'
+function res=helper_derivative(poly,deri)
+    tmp=sym2cell(factor(deri));
+    % tmp={poly,tmp{:}};
+    % poly
+    % tmp{:}
+    res=diff(poly,tmp{:});
+    % res
+end
+
+%   applying all k-th order partial-derivatives on determinant and permanent
+function [det_u,perm_u]=apply_derivatives(a,perm,n,k)
+    ders=get_all_monomials(n,k);
+    disp('got monomials')
+    det_u=cellfun(@(x) helper_derivative(a,x),ders);
+    disp('det deri done')
+    perm_u=cellfun(@(x) helper_derivative(perm,x),ders);
+    disp('perm deri done')
+end
+ %  alternate definitions that are faster for higher dimensions
+
+function res=helper_derivative(poly,deri)
+tmp=sym2cell(factor(deri));
+res=diff(poly,tmp{:});
+end
+
+function [det_u,perm_u]=apply_derivatives(a,perm,n,k)
+ders=get_all_monomials(n,k);
+disp('got monomials')
+det_u=cell(1,size(ders,2));
+for i=1:size(ders,2)
+    det_u{i}=helper_derivative(a,ders{i});
+end    
+% det_u=cellfun(@(x) helper_derivative(a,x),ders);
+disp('det deri done')
+perm_u=cell(1,size(ders,2));
+for i=1:size(ders,2)
+    perm_u{i}=helper_derivative(perm,ders{i});
+end    
+
+
+% perm_u=cellfun(@(x) helper_derivative(perm,x),ders);
+det_u=cell2sym(det_u);
+perm_u=cell2sym(perm_u);
+disp('perm deri done')
+end
+
+
+
+%   getting all possible monomials in z-variables of a given degree.
+function monos= get_l(nn,k)
+    d=nn;
+    x=sym('l',[d,1]);
+    m = nchoosek(k+d-1,d-1);
+    dividers = [zeros(m,1),nchoosek((1:(k+d-1))',d-1),ones(m,1)*(k+d)];
+    a = diff(dividers,1,2)-1;
+    monos = cell(1, size(a,1));
+    for i = 1:size(a,1)
+        monos{i} = prod(x.' .^ a(i,:));
+    end
+end
+
+% function vecs=get_vecs()
+% 
+% 
+% end
+
+
+%   getting APP
+function get_app(a,perm,n,nn,k)
+    monos=get_l(nn,n-k);
+    monos=flip(monos);
+    rows=size(a);
+    rows=rows(2);
+    cols=size(monos);
+    cols=cols(2);
+
+    %   getting vector of coefficients of each polynomials
+    function vec=get_vec(x)
+        ii=1;
+        jj=1;
+        vec=zeros(1,cols);
+        [c,t]=coeffs(x);
+        j=size(t);
+        j=j(2);
+        
+        while (jj<=j & ii<=cols)
+            
+            if t(jj)==monos(ii)
+                vec(ii)=c(jj);
+                ii=ii+1;
+                jj=jj+1;
+            else
+                ii=ii+1;
+            end
+        end
+        if jj<=j
+            %  just a sanity check. Never got this error.
+            disp('monomials sorted in wrong order.')
+
+        end
+    end
+    
+    %  getting coefficient vector of all polynomials
+    mat_a=zeros(rows,cols);
+    for i=1:rows
+        mat_a(i,:)=get_vec(a(i));
+    end
+    disp('computing rank')
+    rank(mat_a)
+    
+    mat_a=zeros(rows,cols);
+    for i=1:rows
+        mat_a(i,:)=get_vec(perm(i));
+    end
+    disp('computing rank')
+    rank(mat_a)
+   
+end
